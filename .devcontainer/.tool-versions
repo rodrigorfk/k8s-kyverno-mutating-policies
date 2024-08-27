@@ -1,0 +1,7 @@
+jq 1.7.1
+yq 4.44.1
+kubectl 1.30.4
+kubectx 0.9.5
+kind 0.24.0
+helm 3.15.4
+helmfile 0.167.1
