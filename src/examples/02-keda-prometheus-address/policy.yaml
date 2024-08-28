@@ -1,0 +1,87 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    policies.kyverno.io/description:
+      The KEDA Prometheus Scaler requires the serverAddress
+      attribute which informs the Scaler about the Prometheus endpoint.
+      The problem with this approach, however, is that when for
+      some reason the address changes, that you have to update every individual Helm
+      release. In case where you have 10 microservices that use the Prometheus scaler,
+      it means that we have to trigger 10 new deployments. This is an inefficient
+      and cumbersome process which is essentially just TOIL. A better way to do this,
+      is by storing the serverAddress in a ConfigMap and use Kyverno to update every
+      ScaledObject by reading the address from the ConfigMap and replace the address
+      in the ScaledObject with this value. This is exactly what this ClusterPolicy
+      does.
+    policies.kyverno.io/subject: KedaPrometheusScaler
+    policies.kyverno.io/title: Set KEDA Prometheus Scaler serverAddress
+  name: keda-prometheus-serveraddress
+spec:
+  admission: true
+  background: false
+  rules:
+    - match:
+        all:
+          - resources:
+              annotations:
+                keda.prometheus.sh/use-central-serveraddress: "true"
+              kinds:
+                - keda.sh/v1alpha1/ScaledObject
+              operations:
+                - CREATE
+                - UPDATE
+      mutate:
+        foreach:
+          - context:
+              - configMap:
+                  name: keda-prometheus-serveraddress
+                  namespace: observability
+                name: serveraddress
+            list: request.object.spec.triggers
+            patchesJson6902: |-
+              - path: /spec/triggers/{{elementIndex}}/metadata/serverAddress
+                op: add
+                value: {{serveraddress.data.main}}
+            preconditions:
+              all:
+                - key: "{{element.type || ''}}"
+                  operator: Equals
+                  value: prometheus
+      name: scaled-object
+      skipBackgroundRequests: true
+    - match:
+        any:
+          - resources:
+              kinds:
+                - ConfigMap
+              names:
+                - keda-prometheus-serveraddress
+              namespaces:
+                - observability
+              operations:
+                - CREATE
+                - UPDATE
+      mutate:
+        foreach:
+          - list: target.spec.triggers[]
+            patchesJson6902: |-
+              - path: /spec/triggers/{{elementIndex}}/metadata/serverAddress
+                op: add
+                value: "{{ request.object.data.main }}"
+            preconditions:
+              all:
+                - key: "{{ element.type || '' }}"
+                  operator: Equals
+                  value: prometheus
+        targets:
+          - apiVersion: keda.sh/v1alpha1
+            kind: ScaledObject
+            preconditions:
+              all:
+                - key: '{{ target.metadata.annotations."keda.prometheus.sh/use-central-serveraddress" || '''' }}'
+                  operator: Equals
+                  value: "true"
+      name: configmap
+      skipBackgroundRequests: true
+  validationFailureAction: Audit

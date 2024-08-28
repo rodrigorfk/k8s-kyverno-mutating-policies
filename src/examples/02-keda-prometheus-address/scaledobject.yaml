@@ -1,0 +1,14 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: prometheus-scaledobject
+  annotations:
+    keda.prometheus.sh/use-central-serveraddress: "true"
+spec:
+  scaleTargetRef:
+    name: my-deployment
+  triggers:
+  - type: prometheus
+    metadata:
+      serverAddress: http://old-address:9090
+      query: sum(rate(http_requests_total{job="app"}[2m]))

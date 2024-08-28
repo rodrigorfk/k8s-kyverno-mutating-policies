@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-ecr-different-region-does-not-exists
+  namespace: default
+spec:
+  containers:
+  - name: nginx
+    image: 111111111111.dkr.ecr.us-east-1.amazonaws.com/nginx

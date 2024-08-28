@@ -1,0 +1,173 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: Nginx
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/title: Inject Nginx Sidecar Container
+    policies.kyverno.io/description: 
+      Injects a nginx sidecar container into the pod when the label nginx.kyverno.io/inject is set to true.
+      Uses a configMap to store the sidecar container configuration.
+  name: nginx-inject-sidecar
+spec:
+  admission: true
+  background: true
+  rules:
+    - name: inject-sidecar
+      preconditions:
+        all:
+          - key: "{{ instance }}"
+            operator: NotEquals
+            value: ""
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+              selector:
+                matchLabels:
+                  nginx.kyverno.io/inject: "true"
+      context:
+        - name: instance
+          variable:
+            value: '{{request.object.metadata.labels."nginx.kyverno.io/instance" || request.object.metadata.labels."app" || request.object.metadata.labels."app.kubernetes.io/instance" || request.object.metadata.labels."app.kubernetes.io/name" || ''''}}'
+        - name: revision
+          variable:
+            value: '{{request.object.metadata.labels."nginx.kyverno.io/revision" || request.namespace.metadata.labels."nginx.kyverno.io/revision" || ''default''}}'
+        - configMap:
+            name: nginx-inject-sidecar-{{revision}}
+            namespace: kube-system
+          name: config
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations:
+              +(kubectl.kubernetes.io/default-container): "{{request.object.spec.containers[0].name}}"
+              +(kubectl.kubernetes.io/default-logs-container): "{{request.object.spec.containers[0].name}}"
+            labels:
+              nginx.kyverno.io/revision: "{{revision}}"
+          spec:
+            containers:
+              - name: nginx-sidecar
+                image: "{{config.data.image}}"
+                imagePullPolicy: IfNotPresent
+                lifecycle:
+                  preStop:
+                    exec:
+                      command:
+                        - sh
+                        - -c
+                        - sleep 10
+                livenessProbe:
+                  failureThreshold: 2
+                  initialDelaySeconds: 60
+                  periodSeconds: 30
+                  successThreshold: 1
+                  timeoutSeconds: 5
+                  httpGet:
+                    path: /healthz
+                    port: 8080
+                ports:
+                  - containerPort: 8080
+                    name: http
+                readinessProbe:
+                  failureThreshold: 2
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  successThreshold: 2
+                  timeoutSeconds: 5
+                  httpGet:
+                    path: /healthz
+                    port: 8080
+                resources:
+                  limits:
+                    cpu: '{{(!contains(keys(request.object.metadata.annotations || request.object.metadata), ''nginx.kyverno.io/proxyCPULimit'') && (request.object.metadata.annotations."nginx.kyverno.io/proxyCPU" || ''1'')) || (request.object.metadata.annotations."nginx.kyverno.io/proxyCPULimit" != ''null'' && request.object.metadata.annotations."nginx.kyverno.io/proxyCPULimit" || null)}}'
+                    memory: '{{request.object.metadata.annotations."nginx.kyverno.io/proxyMemoryLimit" || request.object.metadata.annotations."nginx.kyverno.io/proxyMemory" || ''2Gi''}}'
+                  requests:
+                    cpu: '{{request.object.metadata.annotations."nginx.kyverno.io/proxyCPU" || (request.object.metadata.annotations."nginx.kyverno.io/proxyCPULimit" != ''null'' && request.object.metadata.annotations."nginx.kyverno.io/proxyCPULimit") || ''1''}}'
+                    memory: '{{request.object.metadata.annotations."nginx.kyverno.io/proxyMemory" || request.object.metadata.annotations."nginx.kyverno.io/proxyMemoryLimit" || ''2Gi''}}'
+                volumeMounts:
+                  - name: nginx-tls
+                    mountPath: /opt/sslconfig
+            volumes:
+              - name: nginx-tls
+                secret:
+                  defaultMode: 420
+                  secretName: nginx-{{instance}}-tls
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: Nginx
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/title: Inject Nginx Sidecar Container Certificate
+    policies.kyverno.io/description: Generate a TLS certificate for the Nginx sidecar container.
+  name: nginx-inject-sidecar-generate-certificate
+spec:
+  admission: true
+  background: true
+  rules:
+    - name: generate-certificate
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+              selector:
+                matchLabels:
+                  nginx.kyverno.io/inject: "true"
+      preconditions:
+        all:
+          - key: "{{ instance }}"
+            operator: NotEquals
+            value: ""
+      context:
+        - name: instance
+          variable:
+            value: '{{request.object.metadata.labels."nginx.kyverno.io/instance" || request.object.metadata.labels."app" || request.object.metadata.labels."app.kubernetes.io/instance" || request.object.metadata.labels."app.kubernetes.io/name" || ''''}}'
+        - name: revision
+          variable:
+            value: '{{request.object.metadata.labels."nginx.kyverno.io/revision" || request.namespace.metadata.labels."nginx.kyverno.io/revision" || ''default''}}'
+        - configMap:
+            name: nginx-inject-sidecar-{{revision}}
+            namespace: kube-system
+          name: config
+      generate:
+        apiVersion: cert-manager.io/v1
+        data:
+          apiVersion: cert-manager.io/v1
+          kind: Certificate
+          metadata:
+            labels:
+              nginx.kyverno.io/inject: "true"
+              nginx.kyverno.io/instance: "{{instance}}"
+            ownerReferences: "{{request.object.metadata.ownerReferences || null}}"
+          spec:
+            commonName: Nginx TLS certificate
+            dnsNames:
+              - localhost
+            duration: "{{config.data.certificateDuration || '43800h0m0s'}}"
+            ipAddresses:
+              - 127.0.0.1
+            issuerRef:
+              group: "{{config.data.issuerRefGroup || 'cert-manager.io'}}"
+              kind: "{{config.data.issuerRefKind || 'ClusterIssuer'}}"
+              name: "{{config.data.issuerRefName || 'nginx-selfsigned-issuer'}}"
+            privateKey:
+              encoding: PKCS8
+            renewBefore: "{{config.data.certificateRenewBefore || '8760h0m0s'}}"
+            secretName: nginx-{{instance}}-tls
+        kind: Certificate
+        name: nginx-{{instance}}
+        namespace: "{{request.object.metadata.namespace}}"
+        synchronize: true
+

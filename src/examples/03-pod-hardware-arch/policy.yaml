@@ -1,0 +1,54 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  annotations:
+    pod-policies.kyverno.io/autogen-controllers: none
+    policies.kyverno.io/category: cluster-base
+    policies.kyverno.io/description:
+      To avoid unintended scheduling issues when deploying
+      workloads without defining the right hardware arch via Affinity or nodeSelector
+      supported by the workload, this policy enforce a default arch, configurable
+      via a namespace label or fallbacks to amd64, for the newly create pod.
+    policies.kyverno.io/subject: Kubernetes Arch
+    policies.kyverno.io/title: Use the default arch when a specific one is not provided
+  name: mutate-pod-hardware-arch
+spec:
+  admission: true
+  background: false
+  rules:
+    - context:
+        - apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{ request.object.metadata.namespace }}
+          name: namespace
+      exclude:
+        any:
+          - resources:
+              namespaceSelector:
+                matchLabels:
+                  policies.kyverno.io/disable-default-arch-enforcement: "true"
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              operations:
+                - CREATE
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/nodeSelector/kubernetes.io~1arch
+            op: add
+            value: {{ namespace.metadata.labels."policies.kyverno.io/default-arch" || 'arm64' }}
+      name: mutate-pod-hardware-arch
+      preconditions:
+        all:
+          - key: "{{ request.object.metadata.ownerReferences[0].kind || '' }}"
+            operator: NotEquals
+            value: DaemonSet
+          - key: '{{ request.object.spec.nodeSelector."kubernetes.io/arch" || '''' }}'
+            operator: Equals
+            value: ""
+          - key: "{{ contains(to_string(request.object.spec.affinity), 'kubernetes.io/arch') }}"
+            operator: Equals
+            value: false
+      skipBackgroundRequests: true

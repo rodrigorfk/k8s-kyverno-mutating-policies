@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-nginx-sidecar
+  labels:
+    app: myapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+  template:
+    metadata:
+      labels:
+        app: myapp
+        nginx.kyverno.io/inject: "true"
+    spec:
+      containers:
+      - name: main-container
+        image: busybox
+        command: ['sh', '-c', 'echo The app is running! && sleep 3600']

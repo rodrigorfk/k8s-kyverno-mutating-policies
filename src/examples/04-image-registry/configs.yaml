@@ -1,0 +1,25 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    cache.kyverno.io/enabled: "true"
+  name: public-registry-mapping
+  namespace: kube-system
+data:
+  docker.io: 000000000000.dkr.ecr.eu-west-1.amazonaws.com/docker-hub
+  gcr.io: my-registry-proxy.example.com/gcr
+  ghcr.io: 000000000000.dkr.ecr.eu-west-1.amazonaws.com/github
+  public.ecr.aws: 000000000000.dkr.ecr.eu-west-1.amazonaws.com/ecr-public
+  quay.io: 000000000000.dkr.ecr.eu-west-1.amazonaws.com/quay
+  registry.k8s.io: 000000000000.dkr.ecr.eu-west-1.amazonaws.com/kubernetes
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    cache.kyverno.io/enabled: "true"
+  name: cluster-config
+  namespace: kube-system
+data:
+  region: eu-west-1

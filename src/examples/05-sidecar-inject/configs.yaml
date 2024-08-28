@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    cache.kyverno.io/enabled: "true"
+  name: nginx-inject-sidecar-default
+  namespace: kube-system
+data:
+  image: "nginx:latest"
+  certificateDuration: "43800h0m0s"
+  certificateRenewBefore: "8760h0m0s"
