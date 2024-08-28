@@ -1,0 +1,9 @@
+builds:
+  - env:
+      - CGO_ENABLED=0
+    flags:
+      - -mod=readonly
+    ldflags:
+      - -s
+      - -w
+      - -X ithub.com/rodrigorfk/k8s-kyverno-mutating-policies/ecr-image-checker/pkg/version.REVISION={{.Env.GIT_COMMIT}}
