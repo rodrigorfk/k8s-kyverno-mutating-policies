@@ -1,13 +1,26 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
 {
 	"name": "Ubuntu",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"image": "mcr.microsoft.com/devcontainers/base:jammy",
 	"features": {
-		// "ghcr.io/devcontainers/features/aws-cli:1": {},
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {}
-		// "ghcr.io/rjfmachado/devcontainer-features/cloud-native:1": {}
 	},
-	"postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create.sh"
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"donjayamanne.githistory",
+				"GitHub.codespaces",
+				"github.vscode-github-actions",
+				"github.vscode-pull-request-github",
+				"golang.go",
+				"ms-azuretools.vscode-docker",
+				"ms-vscode-remote.remote-containers",
+				"ms-vscode.makefile-tools",
+				"redhat.vscode-yaml"
+			]
+		}
+	},
+	"postCreateCommand": "${containerWorkspaceFolder}/.devcontainer/post-create.sh",
+	"remoteEnv": {
+		"PATH": "/home/vscode/.asdf/shims:${containerEnv:PATH}"
+	}
 }
