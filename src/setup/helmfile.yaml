@@ -1,0 +1,41 @@
+repositories:
+  - name: kyverno
+    url: https://kyverno.github.io/kyverno/
+
+releases:
+  - name: kyverno
+    namespace: kyverno
+    chart: kyverno/kyverno
+    version: 3.2.6
+    createNamespace: true
+    wait: true
+    values:
+      - admissionController:
+          rbac:
+            clusterRole:
+              extraResources:
+                - apiGroups:
+                  - 'keda.sh'
+                  resources:
+                  - scaledjobs
+                  - scaledobjects
+                  verbs:
+                    - create
+                    - update
+                    - delete
+                    - patch
+                    
+        backgroundController:
+          rbac:
+            clusterRole:
+              extraResources:
+                - apiGroups:
+                  - 'keda.sh'
+                  resources:
+                  - scaledjobs
+                  - scaledobjects
+                  verbs:
+                    - create
+                    - update
+                    - delete
+                    - patch
