@@ -16,17 +16,7 @@ spec:
   admission: true
   background: false
   rules:
-    - context:
-        - apiCall:
-            method: GET
-            urlPath: /api/v1/namespaces/{{ request.object.metadata.namespace }}
-          name: namespace
-      exclude:
-        any:
-          - resources:
-              namespaceSelector:
-                matchLabels:
-                  policies.kyverno.io/disable-default-arch-enforcement: "true"
+    - name: mutate-pod-hardware-arch
       match:
         any:
           - resources:
@@ -34,12 +24,17 @@ spec:
                 - Pod
               operations:
                 - CREATE
-      mutate:
-        patchesJson6902: |-
-          - path: /spec/nodeSelector/kubernetes.io~1arch
-            op: add
-            value: {{ namespace.metadata.labels."policies.kyverno.io/default-arch" || 'arm64' }}
-      name: mutate-pod-hardware-arch
+      exclude:
+        any:
+          - resources:
+              namespaceSelector:
+                matchLabels:
+                  policies.kyverno.io/disable-default-arch-enforcement: "true"
+      context:
+        - apiCall:
+            method: GET
+            urlPath: /api/v1/namespaces/{{ request.object.metadata.namespace }}
+          name: namespace
       preconditions:
         all:
           - key: "{{ request.object.metadata.ownerReferences[0].kind || '' }}"
@@ -51,4 +46,9 @@ spec:
           - key: "{{ contains(to_string(request.object.spec.affinity), 'kubernetes.io/arch') }}"
             operator: Equals
             value: false
-      skipBackgroundRequests: true
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/nodeSelector/kubernetes.io~1arch
+            op: add
+            value: {{ namespace.metadata.labels."policies.kyverno.io/default-arch" || 'arm64' }}
+      

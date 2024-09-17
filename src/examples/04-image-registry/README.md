@@ -70,14 +70,14 @@ The policy relies on two ConfigMaps:
 
 To test this policy:
 
-1. Apply the policy to your cluster:
-   ```bash
-   kubectl apply -f policy.yaml
-   ```
-
-2. Ensure the required ConfigMaps are in place:
+1. Ensure the required ConfigMaps are in place:
    ```bash
    kubectl apply -f configs.yaml
+   ```
+
+2. Apply the policy to your cluster:
+   ```bash
+   kubectl apply -f policy.yaml
    ```
 
 3. Test with different pod configurations:

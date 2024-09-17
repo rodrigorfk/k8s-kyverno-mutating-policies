@@ -95,10 +95,9 @@ To test this policy, you'll need a Kubernetes cluster with Kyverno installed. He
    ```
 
 6. **Test Policy Disable**:
-   Create a new namespace and disable the policy:
+   Disable the policy in the namespace:
    ```bash
-   kubectl create namespace no-arch-enforce
-   kubectl label namespace no-arch-enforce policies.kyverno.io/disable-default-arch-enforcement=true
+   kubectl label namespace test-arch policies.kyverno.io/disable-default-arch-enforcement=true
    ```
    Create a pod in this namespace and verify no architecture is added.
    ```bash

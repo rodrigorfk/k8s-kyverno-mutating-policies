@@ -21,16 +21,16 @@ spec:
             - Pod
           operations:
             - CREATE
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.imagePullSecrets[0].name || '' | length(@) }}"
-            operator: Equals
-            value: 0
       context:
         - name: mappings
           configMap:
             name: public-registry-mapping
             namespace: kube-system
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.imagePullSecrets[0].name || '' | length(@) }}"
+            operator: Equals
+            value: 0
       mutate:
         foreach:
           - list: request.object.spec.containers
@@ -59,6 +59,7 @@ spec:
                 - key: '{{ images.containers."{{element.name}}".digest || ''''}}'
                   operator: NotEquals
                   value: ""
+
     - name: replace-image-registry-pod-init-containers
       match:
         resources:
@@ -66,6 +67,11 @@ spec:
             - Pod
           operations:
             - CREATE
+      context:
+        - name: mappings
+          configMap:
+            name: public-registry-mapping
+            namespace: kube-system
       preconditions:
         all:
           - key: "{{ request.object.spec.initContainers[] || '' | length(@) }}"
@@ -74,18 +80,9 @@ spec:
           - key: "{{ request.object.spec.imagePullSecrets[0].name || '' | length(@) }}"
             operator: Equals
             value: 0
-      context:
-        - name: mappings
-          configMap:
-            name: public-registry-mapping
-            namespace: kube-system
       mutate:
         foreach:
           - list: request.object.spec.initContainers
-            patchesJson6902: |-
-              - path: /spec/initContainers/{{elementIndex}}/image
-                op: replace
-                value: '{{mappings.data."{{images.initContainers."{{element.name}}".registry}}"}}/{{ ( images.initContainers."{{element.name}}".registry == 'docker.io' && regex_match('^[a-z0-9-]+(:.*)?$','{{images.initContainers."{{element.name}}".path}}') && 'library/') || '' }}{{ images.initContainers."{{element.name}}".path}}:{{images.initContainers."{{element.name}}".tag}}'
             preconditions:
               all:
                 - key: '{{mappings.data."{{images.initContainers."{{element.name}}".registry}}" || ''''}}'
@@ -94,11 +91,11 @@ spec:
                 - key: '{{ images.initContainers."{{element.name}}".digest || ''''}}'
                   operator: Equals
                   value: ""
-          - list: request.object.spec.initContainers
             patchesJson6902: |-
               - path: /spec/initContainers/{{elementIndex}}/image
                 op: replace
-                value: '{{mappings.data."{{images.initContainers."{{element.name}}".registry}}"}}/{{ ( images.initContainers."{{element.name}}".registry == 'docker.io' && regex_match('^[a-z0-9-]+(:.*)?$','{{images.initContainers."{{element.name}}".path}}') && 'library/') || '' }}{{ images.initContainers."{{element.name}}".path}}@{{ images.initContainers."{{element.name}}".digest}}'
+                value: '{{mappings.data."{{images.initContainers."{{element.name}}".registry}}"}}/{{ ( images.initContainers."{{element.name}}".registry == 'docker.io' && regex_match('^[a-z0-9-]+(:.*)?$','{{images.initContainers."{{element.name}}".path}}') && 'library/') || '' }}{{ images.initContainers."{{element.name}}".path}}:{{images.initContainers."{{element.name}}".tag}}'
+          - list: request.object.spec.initContainers
             preconditions:
               all:
                 - key: '{{mappings.data."{{images.initContainers."{{element.name}}".registry}}" || ''''}}'
@@ -107,6 +104,11 @@ spec:
                 - key: '{{ images.initContainers."{{element.name}}".digest || ''''}}'
                   operator: NotEquals
                   value: ""
+            patchesJson6902: |-
+              - path: /spec/initContainers/{{elementIndex}}/image
+                op: replace
+                value: '{{mappings.data."{{images.initContainers."{{element.name}}".registry}}"}}/{{ ( images.initContainers."{{element.name}}".registry == 'docker.io' && regex_match('^[a-z0-9-]+(:.*)?$','{{images.initContainers."{{element.name}}".path}}') && 'library/') || '' }}{{ images.initContainers."{{element.name}}".path}}@{{ images.initContainers."{{element.name}}".digest}}'
+
     - name: replace-image-registry-pod-containers-ecr
       match:
         resources:
@@ -121,7 +123,8 @@ spec:
             namespace: kube-system
       mutate:
         foreach:
-          - context:
+          - list: request.object.spec.containers
+            context:
               - name: registryId
                 variable:
                   value: '{{ regex_replace_all(''^([0-9]+).dkr.ecr.*'', images.containers."{{element.name}}".registry, ''$1'') }}'
@@ -139,11 +142,6 @@ spec:
                       value: "{{ clusterConfig.data.region }}"
                   service:
                     url: http://ecr-image-checker.kube-system:9898/api/v1/image-exists
-            list: request.object.spec.containers
-            patchesJson6902: |-
-              - path: /spec/containers/{{elementIndex}}/image
-                op: replace
-                value: '{{ registryId }}.dkr.ecr.{{ clusterConfig.data.region }}.amazonaws.com/{{ images.containers."{{element.name}}".path}}:{{images.containers."{{element.name}}".tag}}'
             preconditions:
               all:
                 - key: '{{images.containers."{{element.name}}".registry || ''''}}'
@@ -155,6 +153,11 @@ spec:
                 - key: "{{imageExists.exists}}"
                   operator: Equals
                   value: true
+            patchesJson6902: |-
+              - path: /spec/containers/{{elementIndex}}/image
+                op: replace
+                value: '{{ registryId }}.dkr.ecr.{{ clusterConfig.data.region }}.amazonaws.com/{{ images.containers."{{element.name}}".path}}:{{images.containers."{{element.name}}".tag}}'
+                
     - name: replace-image-registry-pod-init-containers-ecr
       match:
         resources:
@@ -167,9 +170,15 @@ spec:
           configMap:
             name: cluster-config
             namespace: kube-system
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.initContainers[] || '' | length(@) }}"
+            operator: GreaterThanOrEquals
+            value: 1
       mutate:
         foreach:
-          - context:
+          - list: request.object.spec.initContainers
+            context:
               - name: registryId
                 variable:
                   value: '{{ regex_replace_all(''^([0-9]+).dkr.ecr.*'', images.initContainers."{{element.name}}".registry, ''$1'') }}'
@@ -187,12 +196,6 @@ spec:
                       value: "{{ clusterConfig.data.region }}"
                   service:
                     url: http://ecr-image-checker.kube-system:9898/api/v1/image-exists
-
-            list: request.object.spec.initContainers
-            patchesJson6902: |-
-              - path: /spec/initContainers/{{elementIndex}}/image
-                op: replace
-                value: '{{ registryId }}.dkr.ecr.{{ clusterConfig.data.region }}.amazonaws.com/{{ images.initContainers."{{element.name}}".path}}:{{images.initContainers."{{element.name}}".tag}}'
             preconditions:
               all:
                 - key: '{{images.initContainers."{{element.name}}".registry || ''''}}'
@@ -204,11 +207,10 @@ spec:
                 - key: "{{imageExists.exists}}"
                   operator: Equals
                   value: true
-      preconditions:
-        all:
-          - key: "{{ request.object.spec.initContainers[] || '' | length(@) }}"
-            operator: GreaterThanOrEquals
-            value: 1
+            patchesJson6902: |-
+              - path: /spec/initContainers/{{elementIndex}}/image
+                op: replace
+                value: '{{ registryId }}.dkr.ecr.{{ clusterConfig.data.region }}.amazonaws.com/{{ images.initContainers."{{element.name}}".path}}:{{images.initContainers."{{element.name}}".tag}}'
 
     - name: add-imagepullsecret-containers
       match:
